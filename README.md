@@ -1,1 +1,505 @@
-# SFR-HB
+[index.html](https://github.com/user-attachments/files/26740826/index.html)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SFR Fuel Pin Temperature Calculator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;min-height:100vh}
+h1{text-align:center;padding:16px;font-size:18px;background:#16213e;color:#4fc3f7;border-bottom:2px solid #0f3460}
+.container{display:grid;grid-template-columns:300px 1fr;gap:12px;padding:12px;max-width:1200px;margin:0 auto}
+.panel{background:#16213e;border-radius:8px;padding:14px;border:1px solid #0f3460}
+.panel h2{font-size:13px;color:#4fc3f7;margin-bottom:10px;border-bottom:1px solid #0f3460;padding-bottom:6px;text-transform:uppercase}
+label{display:block;font-size:11px;color:#90caf9;margin:8px 0 3px}
+select,input[type=range]{width:100%;background:#0f3460;color:#e0e0e0;border:1px solid #1565c0;border-radius:4px;padding:4px 6px;font-size:12px}
+input[type=range]{padding:0;cursor:pointer;accent-color:#4fc3f7}
+.val{font-size:11px;color:#4fc3f7;text-align:right;margin-top:2px}
+.results{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.tcard{background:#0f3460;border-radius:6px;padding:8px;text-align:center}
+.tcard .lbl{font-size:10px;color:#90caf9}
+.tcard .num{font-size:16px;font-weight:bold;color:#4fc3f7;margin-top:2px}
+.tcard.hot .num{color:#ef5350}
+.tcard.warn{border:2px solid #ff5722;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{border-color:#ff5722}50%{border-color:#ff9800}}
+.dbar{margin:4px 0}
+.dbar .dlbl{font-size:10px;color:#90caf9;display:flex;justify-content:space-between}
+.dbar .dtrack{background:#0a1628;border-radius:3px;height:8px;margin-top:2px}
+.dbar .dfill{height:8px;border-radius:3px;transition:width 0.3s}
+canvas{border-radius:6px;display:block}
+.warn-box{background:#b71c1c;border-radius:6px;padding:8px;text-align:center;font-size:12px;font-weight:bold;display:none;margin-top:8px}
+.burnup-section{margin-top:10px;padding-top:10px;border-top:1px solid #0f3460}
+.lucuta{background:#0a1628;border-radius:6px;padding:8px;margin-top:8px;font-size:10px}
+.lucuta .row{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #0f3460}
+.lucuta .row:last-child{border-bottom:none}
+.factor-name{color:#90caf9}
+.factor-val{color:#4fc3f7}
+.factor-val.degraded{color:#ef5350}
+.tabs{display:flex;gap:4px;margin-bottom:8px}
+.tab{flex:1;padding:6px;background:#0f3460;border:none;color:#90caf9;border-radius:4px;cursor:pointer;font-size:11px}
+.tab.active{background:#1565c0;color:#fff}
+.chart-wrap{position:relative}
+</style>
+</head>
+<body>
+<h1>SFR Fuel Pin Temperature Calculator — with Burnup Effects</h1>
+<div class="container">
+
+<div style="display:flex;flex-direction:column;gap:12px">
+  <!-- INPUT PANEL -->
+  <div class="panel">
+    <h2>Input Conditions</h2>
+    <label>Coolant</label>
+    <select id="sCool" onchange="update()">
+      <option value="Na">Sodium (Na) — SFR</option>
+      <option value="H2O">Water (H₂O) — LWR</option>
+      <option value="He">Helium (He) — HTGR</option>
+    </select>
+    <label>Cladding</label>
+    <select id="sClad" onchange="update()">
+      <option value="SS">Stainless Steel SS316 — k=20 W/mK</option>
+      <option value="Zr">Zircaloy — k=17 W/mK</option>
+      <option value="HT9">HT9 — k=28 W/mK</option>
+    </select>
+    <label>Bond / Gap</label>
+    <select id="sBond" onchange="update()">
+      <option value="He">Helium He-Bond — k=0.25 W/mK</option>
+      <option value="Na">Sodium Na-Bond — k=62 W/mK</option>
+    </select>
+    <label>Fuel Type</label>
+    <select id="sFuel" onchange="update()">
+      <option value="MOX">MOX Fuel — k=2.5 W/mK</option>
+      <option value="Metal">Metallic Fuel — k=15.0 W/mK</option>
+      <option value="UO2">UO₂ Fuel — k=3.0 W/mK</option>
+    </select>
+    <label>Linear Heat Rate q' — <span id="vQ">200</span> W/cm</label>
+    <input type="range" id="rQ" min="20" max="500" value="200" oninput="document.getElementById('vQ').textContent=this.value;update()">
+    <label>Coolant Inlet Temperature — <span id="vTc">400</span> °C</label>
+    <input type="range" id="rTc" min="150" max="650" value="400" oninput="document.getElementById('vTc').textContent=this.value;update()">
+  </div>
+
+  <!-- BURNUP PANEL -->
+  <div class="panel">
+    <h2>Burnup Effects (Extension)</h2>
+    <label>Burnup — <span id="vBu">0</span> GWd/tHM</label>
+    <input type="range" id="rBu" min="0" max="150" value="0" oninput="document.getElementById('vBu').textContent=this.value;update()">
+    <div class="lucuta" id="lucutaBox">
+      <div style="font-size:10px;color:#4fc3f7;margin-bottom:4px">Lucuta κ Degradation Factors</div>
+      <div class="row"><span class="factor-name">FD (dissolved FP)</span><span class="factor-val" id="fFD">1.000</span></div>
+      <div class="row"><span class="factor-name">FP (precipitates)</span><span class="factor-val" id="fFP">1.000</span></div>
+      <div class="row"><span class="factor-name">RAD (defects)</span><span class="factor-val" id="fRAD">1.000</span></div>
+      <div class="row"><span class="factor-name">Por (porosity)</span><span class="factor-val" id="fPor">1.000</span></div>
+      <div class="row" style="border-top:1px solid #1565c0;margin-top:2px;padding-top:2px">
+        <span class="factor-name" style="color:#fff">k_eff / k₀</span>
+        <span class="factor-val" id="fTot" style="color:#ff9800">1.000</span>
+      </div>
+    </div>
+    <label style="margin-top:10px">Gap Conductance Degradation</label>
+    <div class="lucuta">
+      <div class="row"><span class="factor-name">h_gap factor</span><span class="factor-val" id="fGap">1.000</span></div>
+      <div class="row"><span class="factor-name">Effective h_gap</span><span class="factor-val" id="vHgap">—</span></div>
+    </div>
+    <div class="warn-box" id="warnMelt">⚠ FUEL MELT WARNING</div>
+  </div>
+
+  <!-- RESULTS PANEL -->
+  <div class="panel">
+    <h2>Temperature Results</h2>
+    <div class="results">
+      <div class="tcard"><div class="lbl">Coolant</div><div class="num" id="rTcool">—</div></div>
+      <div class="tcard"><div class="lbl">Clad OD</div><div class="num" id="rTco">—</div></div>
+      <div class="tcard"><div class="lbl">Clad ID</div><div class="num" id="rTci">—</div></div>
+      <div class="tcard"><div class="lbl">Fuel Surface</div><div class="num" id="rTfs">—</div></div>
+      <div class="tcard hot" style="grid-column:1/-1"><div class="lbl">Fuel Centerline</div><div class="num" id="rTfc">—</div></div>
+    </div>
+    <div style="margin-top:10px">
+      <div style="font-size:10px;color:#90caf9;margin-bottom:6px">ΔT Breakdown by Layer</div>
+      <div class="dbar"><div class="dlbl"><span>Convection</span><span id="dTconv">—</span></div><div class="dtrack"><div class="dfill" id="bConv" style="background:#42a5f5"></div></div></div>
+      <div class="dbar"><div class="dlbl"><span>Cladding</span><span id="dTclad">—</span></div><div class="dtrack"><div class="dfill" id="bClad" style="background:#66bb6a"></div></div></div>
+      <div class="dbar"><div class="dlbl"><span>Bond/Gap</span><span id="dTbond">—</span></div><div class="dtrack"><div class="dfill" id="bBond" style="background:#ffa726"></div></div></div>
+      <div class="dbar"><div class="dlbl"><span>Fuel Interior</span><span id="dTfuel">—</span></div><div class="dtrack"><div class="dfill" id="bFuel" style="background:#ef5350"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT PANEL: charts -->
+<div style="display:flex;flex-direction:column;gap:12px">
+  <div class="panel">
+    <h2>Fuel Pin Cross-Section — Temperature Color Map</h2>
+    <canvas id="cMap" width="500" height="500"></canvas>
+  </div>
+  <div class="panel">
+    <div class="tabs">
+      <button class="tab active" onclick="setTab(0,this)">Radial T Profile</button>
+      <button class="tab" onclick="setTab(1,this)">Burnup vs Centerline T</button>
+      <button class="tab" onclick="setTab(2,this)">Lucuta Factors vs Burnup</button>
+    </div>
+    <canvas id="cChart" width="500" height="260"></canvas>
+  </div>
+</div>
+</div>
+
+<script>
+const MAT = {
+  cool:{Na:{h:50000},H2O:{h:30000},He:{h:3000}},
+  clad:{SS:{k:20},Zr:{k:17},HT9:{k:28}},
+  bond:{He:{k:0.25},Na:{k:62}},
+  fuel:{
+    MOX:{k:2.5,Tmelt:2750,rf:3e-3,rci:3.1e-3,rco:3.7e-3},
+    Metal:{k:15.0,Tmelt:1200,rf:3e-3,rci:3.1e-3,rco:3.7e-3},
+    UO2:{k:3.0,Tmelt:2800,rf:3e-3,rci:3.1e-3,rco:3.7e-3}
+  }
+};
+
+// Lucuta degradation factors
+function lucuta(Bu, fuelKey, Tclad_avg){
+  Bu = parseFloat(Bu);
+  const FD = 1/(1 + 0.00187*Bu);
+  const FP = 1/(1 + 0.0368*Math.pow(Bu,0.5));
+  // RAD anneals above ~700°C at centerline; use simplified factor
+  const Tcenter_approx = Tclad_avg + 200; // rough estimate for RAD
+  const RAD = Tcenter_approx > 700 ? 0.92 : (1 - 0.0033*Bu);
+  // Porosity increases with burnup: p ~ 0.04 + 0.0015*Bu, Cs=0.5
+  const p = Math.min(0.04 + 0.0015*Bu, 0.25);
+  const Cs = 0.5;
+  const Por = (1-p)/(1+Cs*p);
+  const total = FD*FP*RAD*Por;
+  return {FD,FP,RAD,Por,total,p};
+}
+
+// Gap conductance degradation with burnup
+function gapFactor(Bu){
+  // Gap conductance degrades as JOG forms and burnup accumulates
+  // Simple model: degrades ~30% over 100 GWd/tHM
+  return Math.max(0.5, 1 - 0.003*Bu);
+}
+
+function calcFuelTemp(qWcm, Tcool, fuelKey, bondKey, cladKey, coolKey, Bu){
+  const qWm = qWcm * 100; // W/cm → W/m
+  const f = MAT.fuel[fuelKey];
+  const kclad = MAT.clad[cladKey].k;
+  const kbond0 = MAT.bond[bondKey].k;
+  const h = MAT.cool[coolKey].h;
+  const {rf,rci,rco} = f;
+
+  // Burnup effects
+  const lf = lucuta(Bu, fuelKey, Tcool+50);
+  const kfuel = f.k * lf.total;
+  const gf = gapFactor(Bu);
+  const kbond = kbond0 * gf;
+  const rm = (rf+rci)/2;
+  const delta = rci-rf;
+
+  const dTconv = qWm/(2*Math.PI*rco*h);
+  const dTclad = qWm*Math.log(rco/rci)/(2*Math.PI*kclad);
+  const dTbond = qWm*delta/(2*Math.PI*rm*kbond);
+  const dTfuel = qWm/(4*Math.PI*kfuel);
+
+  const Tco  = Tcool + dTconv;
+  const Tci  = Tco   + dTclad;
+  const Tfs  = Tci   + dTbond;
+  const Tfc  = Tfs   + dTfuel;
+
+  return {Tcool,Tco,Tci,Tfs,Tfc,dTconv,dTclad,dTbond,dTfuel,kfuel,kbond,lf,gf,rf,rci,rco};
+}
+
+function tempAt(r, res){
+  const {Tcool,Tco,Tci,Tfs,Tfc,rf,rci,rco,dTconv,dTclad,dTbond,dTfuel} = res;
+  if(r>=rco) return Tcool + res.dTconv*(rco/r); // approximate outside
+  if(r>=rci) {
+    const frac = Math.log(rco/r)/Math.log(rco/rci);
+    return Tco + dTclad*frac;
+  }
+  if(r>=rf){
+    const frac = (rci-r)/(rci-rf);
+    return Tci + dTbond*frac;
+  }
+  return Tfc - dTfuel*(r/rf)*(r/rf);
+}
+
+function tempToColor(T, Tmin, Tmax){
+  const t = Math.max(0,Math.min(1,(T-Tmin)/(Tmax-Tmin)));
+  // blue→yellow→red
+  if(t<0.5){
+    const s=t*2;
+    return [Math.round(21+s*(255-21)), Math.round(101+s*(238-101)), Math.round(192+s*(88-192))];
+  } else {
+    const s=(t-0.5)*2;
+    return [Math.round(255+s*(183-255)), Math.round(238+s*(28-238)), Math.round(88+s*(28-88))];
+  }
+}
+
+let activeTab=0;
+function setTab(i,btn){
+  activeTab=i;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  drawChart(window._lastRes);
+}
+
+let lastRes=null;
+function update(){
+  const qWcm = parseFloat(document.getElementById('rQ').value);
+  const Tcool = parseFloat(document.getElementById('rTc').value);
+  const Bu    = parseFloat(document.getElementById('rBu').value);
+  const fuelKey = document.getElementById('sFuel').value;
+  const bondKey = document.getElementById('sBond').value;
+  const cladKey = document.getElementById('sClad').value;
+  const coolKey = document.getElementById('sCool').value;
+
+  const res = calcFuelTemp(qWcm,Tcool,fuelKey,bondKey,cladKey,coolKey,Bu);
+  window._lastRes = res;
+
+  // Update result cards
+  const fmt = v=>(v.toFixed(0)+'°C');
+  document.getElementById('rTcool').textContent=fmt(res.Tcool);
+  document.getElementById('rTco').textContent=fmt(res.Tco);
+  document.getElementById('rTci').textContent=fmt(res.Tci);
+  document.getElementById('rTfs').textContent=fmt(res.Tfs);
+  document.getElementById('rTfc').textContent=fmt(res.Tfc);
+
+  // ΔT bars
+  const total = res.dTconv+res.dTclad+res.dTbond+res.dTfuel;
+  const bars=['Conv','Clad','Bond','Fuel'];
+  const vals=[res.dTconv,res.dTclad,res.dTbond,res.dTfuel];
+  const ids=['dTconv','dTclad','dTbond','dTfuel'];
+  vals.forEach((v,i)=>{
+    document.getElementById(ids[i]).textContent=v.toFixed(0)+'°C';
+    document.getElementById('b'+bars[i]).style.width=Math.max(2,(v/total*100))+'%';
+  });
+
+  // Lucuta factors
+  const {FD,FP,RAD,Por,total:tot} = res.lf;
+  const setFactor=(id,v)=>{
+    const el=document.getElementById(id);
+    el.textContent=v.toFixed(3);
+    el.className='factor-val'+(v<0.95?' degraded':'');
+  };
+  setFactor('fFD',FD); setFactor('fFP',FP); setFactor('fRAD',RAD); setFactor('fPor',Por);
+  document.getElementById('fTot').textContent=tot.toFixed(3);
+  document.getElementById('fTot').style.color=tot<0.7?'#ef5350':tot<0.85?'#ff9800':'#4fc3f7';
+
+  // Gap factor
+  document.getElementById('fGap').textContent=res.gf.toFixed(3);
+  document.getElementById('vHgap').textContent=(MAT.bond[bondKey].k*res.gf).toFixed(1)+' W/mK';
+
+  // Melt warning
+  const melt = MAT.fuel[fuelKey].Tmelt;
+  const wm = document.getElementById('warnMelt');
+  const fc = document.getElementById('rTfc');
+  const fcard = fc.closest('.tcard');
+  if(res.Tfc > melt){
+    wm.style.display='block';
+    wm.textContent=`⚠ MELT! T_fc=${res.Tfc.toFixed(0)}°C > T_melt=${melt}°C`;
+    fcard.classList.add('warn');
+  } else {
+    wm.style.display='none';
+    fcard.classList.remove('warn');
+  }
+
+  drawMap(res);
+  drawChart(res);
+}
+
+function drawMap(res){
+  const cv=document.getElementById('cMap');
+  const ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  const cx=W/2, cy=H/2;
+  const scale = H*0.42/res.rco;
+  const Tmin=res.Tcool, Tmax=res.Tfc;
+  const img=ctx.createImageData(W,H);
+
+  for(let px=0;px<W;px++){
+    for(let py=0;py<H;py++){
+      const dx=(px-cx)/scale, dy=(py-cy)/scale;
+      const r=Math.sqrt(dx*dx+dy*dy);
+      let rgb;
+      if(r>res.rco*1.35){rgb=[26,26,46];}
+      else {
+        const T=tempAt(Math.min(r,res.rco),res);
+        rgb=tempToColor(T,Tmin,Tmax);
+      }
+      const idx=4*(py*W+px);
+      img.data[idx]=rgb[0];img.data[idx+1]=rgb[1];img.data[idx+2]=rgb[2];img.data[idx+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+
+  // Layer circles
+  ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=1.5;
+  [res.rf,res.rci,res.rco].forEach(r=>{
+    ctx.beginPath(); ctx.arc(cx,cy,r*scale,0,2*Math.PI); ctx.stroke();
+  });
+
+  // Labels + temps
+  const labels=[
+    {r:0,lbl:'Center',T:res.Tfc},
+    {r:(res.rf+res.rci)/2,lbl:'Bond',T:(res.Tfs+res.Tci)/2},
+    {r:(res.rci+res.rco)/2,lbl:'Clad',T:(res.Tci+res.Tco)/2},
+    {r:res.rco*1.15,lbl:'Coolant',T:res.Tcool}
+  ];
+  labels.forEach(({r,lbl,T})=>{
+    ctx.fillStyle='rgba(0,0,0,0.55)';
+    ctx.fillRect(cx+r*scale-36,cy-12,72,22);
+    ctx.fillStyle='#fff'; ctx.font='bold 11px Arial'; ctx.textAlign='center';
+    ctx.fillText(T.toFixed(0)+'°C',cx+r*scale,cy+2);
+    ctx.fillStyle='#90caf9'; ctx.font='9px Arial';
+    ctx.fillText(lbl,cx+r*scale,cy+13);
+  });
+
+  // Color legend
+  const gx=W-60, gy=20, gw=14, gh=200;
+  const grad=ctx.createLinearGradient(0,gy+gh,0,gy);
+  grad.addColorStop(0,`rgb(21,101,192)`);
+  grad.addColorStop(0.5,`rgb(255,238,88)`);
+  grad.addColorStop(1,`rgb(183,28,28)`);
+  ctx.fillStyle=grad; ctx.fillRect(gx,gy,gw,gh);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=0.5; ctx.strokeRect(gx,gy,gw,gh);
+  ctx.fillStyle='#fff'; ctx.font='10px Arial'; ctx.textAlign='left';
+  ctx.fillText(Tmax.toFixed(0)+'°C',gx+gw+4,gy+10);
+  ctx.fillText(((Tmin+Tmax)/2).toFixed(0)+'°C',gx+gw+4,gy+gh/2+4);
+  ctx.fillText(Tmin.toFixed(0)+'°C',gx+gw+4,gy+gh);
+}
+
+function drawChart(res){
+  if(!res) return;
+  const cv=document.getElementById('cChart');
+  const ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0a1628'; ctx.fillRect(0,0,W,H);
+
+  const pad={l:52,r:20,t:20,b:40};
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+
+  if(activeTab===0) drawRadialProfile(ctx,res,pad,cw,ch,W,H);
+  else if(activeTab===1) drawBurnupCurve(ctx,res,pad,cw,ch,W,H);
+  else drawLucutaCurves(ctx,res,pad,cw,ch,W,H);
+}
+
+function axes(ctx,pad,cw,ch,xmin,xmax,ymin,ymax,xlabel,ylabel,W,H){
+  ctx.strokeStyle='#1565c0'; ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+ch); ctx.lineTo(pad.l+cw,pad.t+ch);
+  ctx.stroke();
+  ctx.fillStyle='#90caf9'; ctx.font='11px Arial'; ctx.textAlign='center';
+  ctx.fillText(xlabel,pad.l+cw/2,H-6);
+  ctx.save(); ctx.translate(12,pad.t+ch/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText(ylabel,0,0); ctx.restore();
+  // ticks
+  ctx.fillStyle='#607d8b'; ctx.font='9px Arial';
+  for(let i=0;i<=4;i++){
+    const xv=xmin+(xmax-xmin)*i/4;
+    const px=pad.l+cw*i/4;
+    ctx.fillText(xv.toFixed(0),px,pad.t+ch+14);
+    ctx.beginPath(); ctx.moveTo(px,pad.t+ch); ctx.lineTo(px,pad.t+ch+4); ctx.stroke();
+  }
+  for(let i=0;i<=4;i++){
+    const yv=ymin+(ymax-ymin)*i/4;
+    const py=pad.t+ch*(1-i/4);
+    ctx.textAlign='right';
+    ctx.fillText(yv.toFixed(0),pad.l-4,py+4);
+    ctx.beginPath(); ctx.moveTo(pad.l,py); ctx.lineTo(pad.l-4,py); ctx.stroke();
+  }
+  return {
+    tx:(x)=>pad.l+cw*(x-xmin)/(xmax-xmin),
+    ty:(y)=>pad.t+ch*(1-(y-ymin)/(ymax-ymin))
+  };
+}
+
+function drawRadialProfile(ctx,res,pad,cw,ch,W,H){
+  const rmax=res.rco*1000*1.3;
+  const {tx,ty}=axes(ctx,pad,cw,ch,0,rmax,res.Tcool,res.Tfc*1.05,'Radial position (mm)','Temperature (°C)',W,H);
+  // draw profile
+  ctx.strokeStyle='#ef5350'; ctx.lineWidth=2; ctx.beginPath();
+  const N=200;
+  for(let i=0;i<=N;i++){
+    const r=res.rco*1.25*i/N;
+    const T=tempAt(r,res);
+    const x=tx(r*1000), y=ty(T);
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  // zone lines
+  const zones=[{r:res.rf,c:'#ffa726',l:'Fuel|Bond'},{r:res.rci,c:'#66bb6a',l:'Bond|Clad'},{r:res.rco,c:'#42a5f5',l:'Clad|Cool'}];
+  zones.forEach(({r,c,l})=>{
+    const x=tx(r*1000);
+    ctx.strokeStyle=c; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle=c; ctx.font='9px Arial'; ctx.textAlign='center';
+    ctx.fillText(l,x,pad.t+8);
+  });
+  ctx.fillStyle='#ef5350'; ctx.font='10px Arial'; ctx.textAlign='left';
+  ctx.fillText('T_fc = '+res.Tfc.toFixed(0)+'°C',pad.l+4,pad.t+16);
+}
+
+function drawBurnupCurve(ctx,res,pad,cw,ch,W,H){
+  const qWcm=parseFloat(document.getElementById('rQ').value);
+  const Tcool=parseFloat(document.getElementById('rTc').value);
+  const fuelKey=document.getElementById('sFuel').value;
+  const bondKey=document.getElementById('sBond').value;
+  const cladKey=document.getElementById('sClad').value;
+  const coolKey=document.getElementById('sCool').value;
+  const melt=MAT.fuel[fuelKey].Tmelt;
+
+  const pts=[];
+  for(let bu=0;bu<=150;bu+=3){
+    const r2=calcFuelTemp(qWcm,Tcool,fuelKey,bondKey,cladKey,coolKey,bu);
+    pts.push({bu,T:r2.Tfc});
+  }
+  const Tmax=Math.max(...pts.map(p=>p.T))*1.05;
+  const {tx,ty}=axes(ctx,pad,cw,ch,0,150,Tcool,Tmax,'Burnup (GWd/tHM)','Centerline T (°C)',W,H);
+
+  // melt line
+  if(melt<Tmax){
+    const ym=ty(melt);
+    ctx.strokeStyle='rgba(255,87,34,0.6)'; ctx.lineWidth=1; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(pad.l,ym); ctx.lineTo(pad.l+cw,ym); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle='#ff5722'; ctx.font='9px Arial'; ctx.textAlign='right';
+    ctx.fillText('T_melt='+melt+'°C',pad.l+cw-4,ym-3);
+  }
+
+  ctx.strokeStyle='#ef5350'; ctx.lineWidth=2; ctx.beginPath();
+  pts.forEach((p,i)=>{ const x=tx(p.bu),y=ty(p.T); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.stroke();
+
+  // current burnup marker
+  const bu0=parseFloat(document.getElementById('rBu').value);
+  const r0=calcFuelTemp(qWcm,Tcool,fuelKey,bondKey,cladKey,coolKey,bu0);
+  ctx.fillStyle='#4fc3f7';
+  ctx.beginPath(); ctx.arc(tx(bu0),ty(r0.Tfc),5,0,2*Math.PI); ctx.fill();
+  ctx.fillStyle='#4fc3f7'; ctx.font='10px Arial'; ctx.textAlign='left';
+  ctx.fillText('Bu='+bu0+' GWd/tHM',tx(bu0)+8,ty(r0.Tfc)-4);
+}
+
+function drawLucutaCurves(ctx,res,pad,cw,ch,W,H){
+  const {tx,ty}=axes(ctx,pad,cw,ch,0,150,0.4,1.05,'Burnup (GWd/tHM)','Factor value',W,H);
+  const factors=[
+    {key:'FD',color:'#42a5f5',lbl:'FD'},
+    {key:'FP',color:'#66bb6a',lbl:'FP'},
+    {key:'RAD',color:'#ff9800',lbl:'RAD'},
+    {key:'Por',color:'#ab47bc',lbl:'Por'},
+    {key:'total',color:'#ef5350',lbl:'Total'}
+  ];
+  factors.forEach(({key,color,lbl})=>{
+    ctx.strokeStyle=color; ctx.lineWidth=key==='total'?2.5:1.5; ctx.beginPath();
+    for(let bu=0;bu<=150;bu+=3){
+      const l=lucuta(bu,'MOX',500);
+      const v=l[key];
+      const x=tx(bu), y=ty(v);
+      bu===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    // legend
+    const li=factors.indexOf(factors.find(f=>f.key===key));
+    ctx.fillStyle=color; ctx.font='10px Arial'; ctx.textAlign='left';
+    ctx.fillText(lbl,pad.l+cw-40,pad.t+16+li*16);
+  });
+}
+
+update();
+</script>
+</body>
+</html>
